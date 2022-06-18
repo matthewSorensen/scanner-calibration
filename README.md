@@ -18,17 +18,15 @@ before operating any laser equipment.
 At the moment, this repository only supports [pewpew-laser](https://github.com/matthewSorensen/pewpew-laser), an
 unreleased scanner and laser control system running on the teensy 4.x microcontroller series.
 
-## Supplies and Equiptment
+## Supplies and Equipment
 
 The following supplies and equipment are required to complete the lens calibration process:
 
-    * A galvo-scanned laser system running a compatible control system, and suitable safety equipment for its
+  * A galvo-scanned laser system running a compatible control system, and suitable safety equipment for its
       operation.
-
-    * A dimensionally stable material capable of high-resolution, high-contrast marking. Low-cost
+  * A dimensionally stable material capable of high-resolution, high-contrast marking. Low-cost
       black cardstock manufactured with a white core is a reasonable material for 1064nm laser calibration.
       Black anodized aluminum is an ideal material, but is significantly more expensive, particularly for larger
       sheets. Cyanotype paper may be suitable for UV and violet laser sources.
-
-    * A flatbed scanner capable of imaging the laser-marked test pattern with minimal distortion.
+  * A flatbed scanner capable of imaging the laser-marked test pattern with minimal distortion.
 
