@@ -6,6 +6,8 @@ import sys
 from skimage import io, measure, morphology
 from skimage.color import rgb2gray
 from skimage.filters import threshold_otsu, gaussian
+from skimage.segmentation import flood
+
 
 import matplotlib.pyplot as plt
 
@@ -51,12 +53,20 @@ def identify_roi(binary_image, n):
     
     return labels, boxes[marks], marks + 1, circled
 
-def find_mark_location(image, box):
+def find_mark_location(image, binary, box):
     a,b,c,d = box
-    offset = int(0.125 * (c - a))
-    roi = gaussian(image[a-offset:c+offset,b-offset:d+offset].astype(float), sigma = offset)
-    return np.unravel_index(np.argmax(roi), roi.shape) + np.array([a - offset, b - offset])
+    offset = int(0.25 * (c - a))
+    roi = image[a-offset:c+offset,b-offset:d+offset].astype(float)
+    binary = binary[a-offset:c+offset,b-offset:d+offset]
+    center = np.unravel_index(np.argmax(roi), roi.shape)
 
+    masked = flood(binary, center) * roi
+    total = np.sum(masked)
+
+    x = np.sum(np.arange(0,masked.shape[0]) @ masked) / total
+    y = np.sum(masked @ np.arange(0,masked.shape[1])) / total
+
+    return  np.array([x,y]) + np.array([a - offset, b - offset])
 
 @click.command()
 @click.option('--negative/--positive', default = True, help = "Default case (--negative) is light marks on a dark background. --positive inverts this.")
@@ -87,10 +97,10 @@ def cal(*args, **kwargs):
         exit()
         
     labels, bboxes, mark_labels, circled = roi
-    coords = np.array(list(find_mark_location(binary, box) for box in bboxes))
+    coords = np.array(list(find_mark_location(smoothed,binary, box) for box in bboxes))
         
     if kwargs['plot']:
-        plt.imshow(binary)
+        plt.imshow(smoothed)
         plt.scatter(coords[:,1], coords[:,0], c = circled, cmap = 'GnBu')
         plt.show()
 
