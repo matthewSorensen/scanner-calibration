@@ -1,5 +1,4 @@
 import click
-import csv as csvlib
 import numpy as np
 import sys
 
@@ -10,20 +9,8 @@ from skimage.segmentation import flood
 
 import matplotlib.pyplot as plt
 
-
 def contained(inner,outer):
     return outer[0] < inner[0] and outer[1] < inner[1] and inner[2] < outer[2] and inner[3] < outer[3]
-
-"""
-def component_bounding_boxes(labels, min_size = 100):
-    rp = measure.regionprops(labels)
-    good_regions = []
-    for p in measure.regionprops(labels):
-        xmin,ymin,xmax,ymax = p.bbox
-        if  (xmax - xmin) < min_size or (ymax - ymin) < min_size:
-            continue
-        good_regions.append(p)
- """
 
 def identify_crop(binary_image, raw_image, min_size = 100): 
     labels = measure.label(morphology.binary_dilation(binary_image), background = True)
@@ -63,7 +50,6 @@ def identify_roi(binary_image, n):
     elif 2 * expected < m:
         print("Too many regions of interest found - check thresholding parameters with --plot")
         return None
-
     
     boxes = np.zeros((m,4),dtype = int)
     boxes[:,0:2] = binary_image.shape
@@ -112,21 +98,31 @@ def find_mark_location(image, binary, box):
 @click.option('--threshold', default = 2.5, type = click.FloatRange(0.0, 20), help = "User-adjustable parameter for image binarization - larger values bias towards black.")
 @click.option('--points', default = 11, type = int, help = "Number of points on the side of the test pattern")
 @click.option('--plot/--silent', default = False, help = "Display the segmented image and final result, or just output points.")
-@click.argument('input', type=click.File('rb'))
+@click.argument('input', type=click.File('rb'), nargs = -1)
 
 def cal(*args, **kwargs):
-
+    if kwargs['crop'] and not kwargs['negative']:
+        print("Cropping is not supported in negated mode")
+        return
+    
+    print("X, Y, Circled, File")
+    for x in kwargs['input']:
+        run_extraction(x,args, kwargs)
+    
+def run_extraction(fp,args,kwargs):
+    
     # Load the image, convert it to greyscale, and then binarize it
-    color_image = io.imread(kwargs['input'])
+    color_image = io.imread(fp)
     image = rgb2gray(color_image)
     smoothed = gaussian(image, sigma=2)
     thresh = kwargs['threshold'] * threshold_otsu(smoothed)
     binary = (smoothed > thresh)
 
+    offset = np.zeros(2)
     if kwargs['crop']:
         crop = identify_crop(binary, image)
         if crop is None:
-            exit()
+            return
         _, image = crop
         smoothed = gaussian(image, sigma=2)
         thresh = kwargs['threshold'] * threshold_otsu(smoothed)
@@ -143,8 +139,8 @@ def cal(*args, **kwargs):
     # Find the regions containing the marks
     roi = identify_roi(binary, kwargs['points'])
     if roi is None:
-        exit()
-        
+        return
+    
     labels, bboxes, mark_labels, circled = roi
     coords = np.array(list(find_mark_location(smoothed,binary, box) for box in bboxes))
         
@@ -154,10 +150,9 @@ def cal(*args, **kwargs):
         plt.show()
 
     # Then print the coordinates to stdio as a CSV
-    print("X, Y, Circled")
     for i in np.argsort(0 - circled):
-        y,x = coords[i]
-        print(f"{x}, {y}, {circled[i] == 1}")
+        y,x = offset + coords[i]
+        print(f"{x}, {y}, {circled[i] == 1}, {fp.name}")
 
 if __name__ == '__main__':
     cal()
