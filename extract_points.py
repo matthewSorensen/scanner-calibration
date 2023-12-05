@@ -123,7 +123,7 @@ def run_extraction(fp,args,kwargs):
         crop = identify_crop(binary, image)
         if crop is None:
             return
-        _, image = crop
+        offset, image = crop
         smoothed = gaussian(image, sigma=2)
         thresh = kwargs['threshold'] * threshold_otsu(smoothed)
         binary = (smoothed > thresh)
