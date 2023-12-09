@@ -105,7 +105,7 @@ def cal(*args, **kwargs):
         print("Cropping is not supported in negated mode")
         return
     
-    print("X, Y, Circled, File")
+    print("X, Y, Fiducial, File")
     for x in kwargs['input']:
         run_extraction(x,args, kwargs)
     

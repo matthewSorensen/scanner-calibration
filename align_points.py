@@ -29,13 +29,12 @@ def kabsch_umeyama(A, B):
 
 def load_datafile(source):
     out = defaultdict(lambda: (list(),list()))
-    with open(source) as csvfile:
-        reader = csv.reader(csvfile, delimiter=',')
-        next(reader) # Ignore the header
-        for x,y,circle,dataset in reader:
-            dataset = dataset.strip()
-            out[dataset][0].append((float(x),float(y)))
-            out[dataset][1].append(circle.strip() == "True")
+    reader = csv.reader(source, delimiter=',')
+    next(reader) # Ignore the header
+    for x,y,circle,dataset in reader:
+        dataset = dataset.strip()
+        out[dataset][0].append((float(x),float(y)))
+        out[dataset][1].append(circle.strip() == "True")
 
     return {dataset : (np.array(coords),np.array(circled)) for dataset, (coords, circled) in out.items()}
 
@@ -119,52 +118,63 @@ def fine_align(datasets, previous, iterations = 10):
 
     return transforms, previous
     
+@click.command()
+@click.option('--plot/--silent', default = False, help = "Display plots of residual error.")
+@click.argument('input', type=click.File('r'))
+@click.argument('output', type=click.File('w'))
 
-data = load_datafile("cal_dat.csv")
-# Use the fiducial markers to roughly align the datasets
-average, permutations = rough_align(data)
-average -= average.mean(axis = 0)
-# Apply the permutations and forget the original order
-circled = None
-for k,(points,c) in data.items():
-    p = permutations[k]
-    data[k] = points[p]
-    if circled is None:
-        circled = c[p]
+def align(*args, **kwargs):
 
-# Align all of the points with a few iterations of aligning to an average, and then averaging the alignment
-transforms, aligned = fine_align(data, average)
+    data = load_datafile(kwargs['input'])
+    # Use the fiducial markers to roughly align the datasets
+    average, permutations = rough_align(data)
+    average -= average.mean(axis = 0)
+    # Apply the permutations and forget the original order
+    circled = None
+    for k,(points,c) in data.items():
+        p = permutations[k]
+        data[k] = points[p]
+        if circled is None:
+            circled = c[p]
 
-# Compute the errors to see if we can divine anything from them
-residuals = []
-for k,(r,t) in transforms.items():
-    v = data[k]
-    residual = aligned - (v @ r.T + t)
-    residuals.append(residual)
+    # Align all of the points with a few iterations of aligning to an average, and then averaging the alignment
+    transforms, aligned = fine_align(data, average)
 
-residuals = np.vstack(residuals)
-cov = np.cov(residuals.T)
-true_position = np.linalg.norm(residuals, axis = 1)
+    # Compute the errors to see if we can divine anything from them
+    residuals = []
+    for k,(r,t) in transforms.items():
+        v = data[k]
+        residual = aligned - (v @ r.T + t)
+        residuals.append(residual)
 
-print("X error standard deviation:", np.sqrt(cov[0,0]))
-print("Y error standard deviation:", np.sqrt(cov[1,1]))
-print("X/Y error covariance:", cov[0,1])
-print("True position error mean:", true_position.mean())
+    residuals = np.vstack(residuals)
+    cov = np.cov(residuals.T)
+    true_position = np.linalg.norm(residuals, axis = 1)
 
-with open("out.csv",'w') as csvfile:
-        writer = csv.writer(csvfile, delimiter=',')
-        writer.writerow(["X","Y","Fiducial","File"])
-        for i,(x,y) in enumerate(average):
-            writer.writerow([x,y,circled[i],""])
+    print("X error standard deviation:", np.sqrt(cov[0,0]))
+    print("Y error standard deviation:", np.sqrt(cov[1,1]))
+    print("X/Y error covariance:", cov[0,1])
+    print("True position error mean:", true_position.mean())
 
-fig, axes = plt.subplots(nrows=2, ncols=2)
-axes[0][0].hist(residuals[:,0], bins = 20)
-axes[0][0].set_title('X-axis Deviation from Average')
-axes[0][1].hist(residuals[:,1], bins = 20)
-axes[0][1].set_title('Y-axis Deviation from Average')
-axes[1][0].hist(true_position, bins = 20)
-axes[1][0].set_title('Distance Deviation from Average')
-axes[1][1].scatter(residuals[:,0],residuals[:,1])
-axes[1][1].set_title('Residuals Scatter Plot')
-axes[1][1].set_aspect('equal')
-plt.show()
+    #with open("out.csv",'w') as csvfile:
+    writer = csv.writer(kwargs['output'], delimiter=',')
+    writer.writerow(["X","Y","Fiducial","File"])
+    for i,(x,y) in enumerate(average):
+        writer.writerow([x,y,circled[i],""])
+
+    if kwargs["plot"]:
+        fig, axes = plt.subplots(nrows=2, ncols=2)
+        axes[0][0].hist(residuals[:,0], bins = 20)
+        axes[0][0].set_title('X-axis Deviation from Average')
+        axes[0][1].hist(residuals[:,1], bins = 20)
+        axes[0][1].set_title('Y-axis Deviation from Average')
+        axes[1][0].hist(true_position, bins = 20)
+        axes[1][0].set_title('Distance Deviation from Average')
+        axes[1][1].scatter(residuals[:,0],residuals[:,1])
+        axes[1][1].set_title('Residuals Scatter Plot')
+        axes[1][1].set_aspect('equal')
+        plt.show()
+
+if __name__ == '__main__':
+    align()
+
