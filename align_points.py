@@ -7,6 +7,8 @@ from collections import defaultdict
 from scipy.spatial import KDTree
 
 def kabsch_umeyama(A, B):
+    # Taken from: https://zpl.fi/aligning-point-patterns-with-kabsch-umeyama-algorithm/
+    # Author released it as CC0 1.0 (Public Domain), so we're good!
     assert A.shape == B.shape
     n, m = A.shape
 
@@ -99,33 +101,70 @@ def rough_align(datasets):
 
 def fine_align(datasets, previous, iterations = 10):
     n = len(datasets)
+    means = {k: v.mean(axis = 0) for k,v in datasets.items()}
+    transforms = {}
     for i in range(iterations):
         updated = np.zeros_like(previous)
-        for points,_ in datasets.values():
-            r,c,t = kabsch_umeyama(previous, points)
-            updated += t + points @ r.T
+        for k, points in datasets.items():
+            mean = means[k]
+            r,c,t = kabsch_umeyama(previous, points - mean)
+            translate = t - r @ mean
+            updated += points @ r.T + translate
+            transforms[k] = (r,translate)
         updated /= n
         delta = np.max(np.abs(previous - updated))
         previous = updated
         if delta < 1e-9:
             break
 
-    return previous
+    return transforms, previous
     
 
-_,ax = plt.subplots()
-ax.set_aspect('equal')
-    
 data = load_datafile("cal_dat.csv")
 # Use the fiducial markers to roughly align the datasets
 average, permutations = rough_align(data)
 average -= average.mean(axis = 0)
 # Apply the permutations and forget the original order
-for k,(points,circled) in data.items():
+circled = None
+for k,(points,c) in data.items():
     p = permutations[k]
-    data[k] = (points[p] - points.mean(axis = 0), circled[p])
+    data[k] = points[p]
+    if circled is None:
+        circled = c[p]
 
 # Align all of the points with a few iterations of aligning to an average, and then averaging the alignment
-aligned = fine_align(data, average)
-plt.scatter(aligned[:,0],aligned[:,1])
+transforms, aligned = fine_align(data, average)
+
+# Compute the errors to see if we can divine anything from them
+residuals = []
+for k,(r,t) in transforms.items():
+    v = data[k]
+    residual = aligned - (v @ r.T + t)
+    residuals.append(residual)
+
+residuals = np.vstack(residuals)
+cov = np.cov(residuals.T)
+true_position = np.linalg.norm(residuals, axis = 1)
+
+print("X error standard deviation:", np.sqrt(cov[0,0]))
+print("Y error standard deviation:", np.sqrt(cov[1,1]))
+print("X/Y error covariance:", cov[0,1])
+print("True position error mean:", true_position.mean())
+
+with open("out.csv",'w') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',')
+        writer.writerow(["X","Y","Fiducial","File"])
+        for i,(x,y) in enumerate(average):
+            writer.writerow([x,y,circled[i],""])
+
+fig, axes = plt.subplots(nrows=2, ncols=2)
+axes[0][0].hist(residuals[:,0], bins = 20)
+axes[0][0].set_title('X-axis Deviation from Average')
+axes[0][1].hist(residuals[:,1], bins = 20)
+axes[0][1].set_title('Y-axis Deviation from Average')
+axes[1][0].hist(true_position, bins = 20)
+axes[1][0].set_title('Distance Deviation from Average')
+axes[1][1].scatter(residuals[:,0],residuals[:,1])
+axes[1][1].set_title('Residuals Scatter Plot')
+axes[1][1].set_aspect('equal')
 plt.show()
